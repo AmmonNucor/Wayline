@@ -548,7 +548,7 @@ function drawSegment(coords, dashed) {
   const segIndex = routeSegments.length; // index of segment being added
   // Offset: even segments shift left (-3), odd shift right (+3)
   // This separates any road travelled in both directions
-  const offsetPx = segIndex % 2 === 0 ? -3 : 3;
+  const offsetPx = segIndex % 2 === 0 ? -8 : 8;
   const line = L.polyline(coords, {
     color: '#e8521a', weight: 4, opacity: 0.85,
     dashArray: dashed ? '8,6' : null,
