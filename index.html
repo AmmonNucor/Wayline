@@ -582,14 +582,14 @@ function drawArrows(coords, offsetDir) {
       // Arrow pointing in direction of travel, rotated to bearing
       const arrowHtml = `<div style="
         width:0; height:0;
-        border-left: 5px solid transparent;
-        border-right: 5px solid transparent;
-        border-bottom: 10px solid #e8521a;
-        opacity: 0.9;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-bottom: 16px solid #e8521a;
+        opacity: 0.95;
         transform: rotate(${bearing}deg);
-        transform-origin: center center;
-        margin-left: -5px;
-        margin-top: -5px;
+        transform-origin: center 75%;
+        margin-left: -4px;
+        margin-top: -8px;
       "></div>`;
 
       const icon = L.divIcon({
