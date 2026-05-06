@@ -791,7 +791,7 @@ async function generateLoop() {
       waypoints.push(pt);
       accDist += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
-      allSegs.push({ coords: seg.coords });
+      allSegs.push(seg.coords);
       prev = pt;
     }
 
@@ -806,7 +806,7 @@ async function generateLoop() {
     }
     accDist += closeSeg.distKm;
     routeSegments.push({ coords: closeSeg.coords, dist: closeSeg.distKm });
-    allSegs.push({ coords: closeSeg.coords });
+    allSegs.push(closeSeg.coords);
     totalDistKm = accDist;
 
     const half = Math.ceil(allSegs.length / 2);
@@ -817,9 +817,7 @@ async function generateLoop() {
     L.polyline(fullCoords, { color: '#e8521a', weight: 3, opacity: 0.85 }).addTo(routeLayer);
     drawArrows(outboundCoords, -1);
     drawArrows(returnCoords, -1);
-    allSegs.forEach((s, i) => {
-      const dir = i < half ? -1 : 1;
-    });
+
 
     redrawKmMarkers();
     updateWaypointsList();
