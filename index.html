@@ -32,7 +32,7 @@
   #header {
     background: var(--ink); color: var(--paper);
     padding: 12px 20px; display: flex; align-items: center; justify-content: space-between;
-    flex-shrink: 0; z-index: 700;
+    flex-shrink: 0; z-index: 700; position: relative;
   }
   #logo { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
   #logo span { color: var(--accent); }
@@ -41,20 +41,20 @@
   .hstat-val { font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700; line-height: 1; color: var(--paper); }
   .hstat-lbl { font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: .08em; text-transform: uppercase; margin-top: 1px; }
 
-  /* Main area */
-  #main { flex: 1; display: flex; overflow: hidden; min-height: 0; position: relative; }
-  #map-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; position: relative; }
-
-  /* Sidebar */
+  /* Main area — sidebar fixed left, map fills rest */
+  #main { flex: 1; position: relative; overflow: hidden; }
   #sidebar {
-    width: 300px; background: var(--paper); border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto;
-    z-index: 600;
+    position: absolute; top: 0; left: 0; bottom: 0; width: 300px;
+    background: var(--paper); border-right: 1px solid var(--border);
+    overflow-y: auto; z-index: 200;
+  }
+  #map-wrap {
+    position: absolute; top: 0; left: 300px; right: 0; bottom: 0;
   }
   @media (max-width: 680px) {
-    #main { flex-direction: column; }
-    #sidebar { width: 100%; max-height: 45vh; border-right: none; border-bottom: 1px solid var(--border); overflow-y: auto; flex-shrink: 0; }
-    #map-wrap { flex: 1; min-height: 55vh; }
+    #sidebar { position: relative; width: 100%; height: 45vh; bottom: auto; border-right: none; border-bottom: 1px solid var(--border); }
+    #main { display: flex; flex-direction: column; }
+    #map-wrap { position: relative; left: 0; flex: 1; min-height: 55vh; }
   }
 
   .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
@@ -148,7 +148,7 @@
   .action-btn:disabled { opacity: .35; cursor: not-allowed; }
 
   /* Map */
-  #map { width: 100%; height: 100%; cursor: crosshair; }
+  #map { position: absolute; inset: 0; cursor: crosshair; }
 
   /* Floating map hint */
   #map-hint {
@@ -296,7 +296,7 @@
     </div>
 
     <!-- Map container -->
-    <div id="map-wrap" style="flex:1;min-height:0;min-width:0;position:relative">
+    <div id="map-wrap">
       <div id="map"></div>
       <div id="map-hint">Click anywhere on the map to add a waypoint</div>
       <div id="spinner"><div class="spin"></div></div>
