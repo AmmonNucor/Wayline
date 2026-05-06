@@ -556,8 +556,7 @@ function drawSegment(coords, dashed, offsetDir) {
 
 function drawArrows(coords, offsetDir) {
   if (coords.length < 2) return;
-  const ARROW_EVERY_M = 80; // place an arrow every ~80 map units
-  const OFFSET = 8; // pixels offset from line center
+  const ARROW_EVERY_M = 100;
   let cumDist = 0, nextArrow = ARROW_EVERY_M / 2;
 
   for (let i = 1; i < coords.length; i++) {
@@ -571,41 +570,43 @@ function drawArrows(coords, offsetDir) {
       const lat = coords[i-1][0] + (coords[i][0] - coords[i-1][0]) * frac;
       const lon = coords[i-1][1] + (coords[i][1] - coords[i-1][1]) * frac;
 
-      // Bearing of segment in degrees
-      const dLon = (coords[i][1] - coords[i-1][1]) * Math.PI / 180;
-      const lat1 = coords[i-1][0] * Math.PI / 180;
-      const lat2 = coords[i][0] * Math.PI / 180;
-      const y = Math.sin(dLon) * Math.cos(lat2);
-      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-      const bearing = Math.atan2(y, x) * 180 / Math.PI;
+      // Compute bearing from screen pixel positions so rotation matches what's drawn
+      const ptA = map.latLngToContainerPoint(L.latLng(coords[i-1]));
+      const ptB = map.latLngToContainerPoint(L.latLng(coords[i]));
+      const dx = ptB.x - ptA.x;
+      const dy = ptB.y - ptA.y;
+      // Screen angle: 0 = right, increases clockwise. CSS rotate(0) = up.
+      // So subtract 90 to align triangle "up" (pointing forward)
+      const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI + 90;
 
-      // Arrow pointing in direction of travel, rotated to bearing
+      // Perpendicular offset in lat/lon
+      // Perp to travel direction (rotated 90° left = -offsetDir)
+      const perpAngle = Math.atan2(dy, dx) + (Math.PI / 2) * offsetDir;
+      const offsetM = 12; // metres offset from line
+      const offsetLat = (Math.sin(perpAngle) * offsetM) / 111320;
+      const offsetLon = (Math.cos(perpAngle) * offsetM) / (111320 * Math.cos(lat * Math.PI / 180));
+
       const arrowHtml = `<div style="
-        width:0; height:0;
-        border-left: 4px solid transparent;
-        border-right: 4px solid transparent;
-        border-bottom: 16px solid #e8521a;
-        opacity: 0.95;
-        transform: rotate(${bearing}deg);
-        transform-origin: center 75%;
-        margin-left: -4px;
-        margin-top: -8px;
+        width:0;height:0;
+        border-left:2px solid transparent;
+        border-right:2px solid transparent;
+        border-bottom:18px solid #c0390a;
+        opacity:0.95;
+        transform:rotate(${angleDeg}deg);
+        transform-origin:center center;
       "></div>`;
 
       const icon = L.divIcon({
         className: '',
         html: arrowHtml,
-        iconSize: [10, 10],
-        iconAnchor: [5, 5]
+        iconSize: [4, 18],
+        iconAnchor: [2, 9]
       });
 
-      // Offset the arrow perpendicular to the bearing
-      const perpBearing = (bearing + 90) * Math.PI / 180;
-      const offsetDeg = OFFSET * 0.000009; // rough pixel-to-degree conversion
-      const offsetLat = -Math.cos(perpBearing) * offsetDeg * offsetDir;
-      const offsetLon = Math.sin(perpBearing) * offsetDeg * offsetDir / Math.cos(lat * Math.PI / 180);
+      L.marker([lat + offsetLat, lon + offsetLon], {
+        icon, zIndexOffset: 200, interactive: false
+      }).addTo(routeLayer);
 
-      L.marker([lat + offsetLat, lon + offsetLon], { icon, zIndexOffset: 200, interactive: false }).addTo(routeLayer);
       nextArrow += ARROW_EVERY_M;
     }
   }
