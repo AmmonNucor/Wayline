@@ -315,6 +315,7 @@
 <div id="toast"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-polylineoffset@1.1.1/leaflet.polylineoffset.js"></script>
 <script>
 // ── STATE ──
 let map, routeLayer, kmLayer;
@@ -544,9 +545,14 @@ function addWaypointMarker(pt, idx) {
 }
 
 function drawSegment(coords, dashed) {
+  const segIndex = routeSegments.length; // index of segment being added
+  // Offset: even segments shift left (-3), odd shift right (+3)
+  // This separates any road travelled in both directions
+  const offsetPx = segIndex % 2 === 0 ? -3 : 3;
   const line = L.polyline(coords, {
     color: '#e8521a', weight: 4, opacity: 0.85,
-    dashArray: dashed ? '8,6' : null
+    dashArray: dashed ? '8,6' : null,
+    offset: offsetPx
   }).addTo(routeLayer);
 }
 
