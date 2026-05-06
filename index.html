@@ -440,7 +440,7 @@ function gotoMyLocation() {
 
 // ── OSRM ROUTING ──
 async function getRoute(from, to) {
-  const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
+  const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson&steps=true`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
@@ -448,9 +448,28 @@ async function getRoute(from, to) {
     clearTimeout(timer);
     const data = await resp.json();
     if (data.code !== 'Ok') throw new Error('OSRM: ' + data.code);
+    // Extract turn maneuvers from steps
+    const maneuvers = [];
+    const legs = data.routes[0].legs || [];
+    legs.forEach(leg => {
+      (leg.steps || []).forEach(step => {
+        const m = step.maneuver;
+        if (!m) return;
+        // Skip depart, arrive, and straight-on
+        if (['depart','arrive','continue','new name'].includes(m.type)) return;
+        if (m.modifier === 'straight') return;
+        maneuvers.push({
+          lat: m.location[1],
+          lon: m.location[0],
+          type: m.type,
+          modifier: m.modifier || 'straight'
+        });
+      });
+    });
     return {
       coords: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
-      distKm: data.routes[0].distance / 1000
+      distKm: data.routes[0].distance / 1000,
+      maneuvers
     };
   } catch(e) {
     clearTimeout(timer);
@@ -496,6 +515,7 @@ async function addWaypoint(pt) {
       const seg = await getRoute(prev, pt);
       waypoints.push(pt);
       drawSegment(seg.coords, false, -1);
+      drawManeuvers(seg.maneuvers);
       totalDistKm += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
       redrawKmMarkers();
@@ -612,6 +632,45 @@ function drawArrows(coords, offsetDir) {
   }
 }
 
+// ── TURN ARROWS ──
+function drawManeuvers(maneuvers) {
+  if (!maneuvers || !maneuvers.length) return;
+  maneuvers.forEach(m => {
+    const svg = getTurnSVG(m.modifier);
+    if (!svg) return;
+    const icon = L.divIcon({
+      className: '',
+      html: svg,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    L.marker([m.lat, m.lon], { icon, zIndexOffset: 400, interactive: false }).addTo(routeLayer);
+  });
+}
+
+function getTurnSVG(modifier) {
+  const col = '#1a56db';
+  const s = 24;
+  // All arrows drawn as SVG paths on a small circle background
+  const bg = `<circle cx="12" cy="12" r="11" fill="white" stroke="${col}" stroke-width="1.5" opacity="0.92"/>`;
+  switch(modifier) {
+    case 'left':
+    case 'sharp left':
+      return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${bg}<path d="M16 18 L16 11 Q16 6 11 6 L8 6 L11 3 M8 6 L11 9" stroke="${col}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'slight left':
+      return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${bg}<path d="M15 18 L15 12 Q14 7 9 7 L7 5 L10 5 M7 5 L7 8" stroke="${col}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'right':
+    case 'sharp right':
+      return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${bg}<path d="M8 18 L8 11 Q8 6 13 6 L16 6 L13 3 M16 6 L13 9" stroke="${col}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'slight right':
+      return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${bg}<path d="M9 18 L9 12 Q10 7 15 7 L17 5 L14 5 M17 5 L17 8" stroke="${col}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'uturn':
+      return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${bg}<path d="M9 18 L9 10 Q9 5 15 5 Q21 5 21 11 L18 11 M21 11 L18 14" stroke="${col}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    default:
+      return null;
+  }
+}
+
 // ── KM MARKERS ──
 function haversine(a, b) {
   const R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLon=(b.lon-a.lon)*Math.PI/180;
@@ -718,7 +777,7 @@ async function generateLoop() {
       waypoints.push(pt);
       accDist += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
-      allSegs.push(seg.coords);
+      allSegs.push({ coords: seg.coords, maneuvers: seg.maneuvers });
       prev = pt;
     }
 
@@ -733,22 +792,18 @@ async function generateLoop() {
     }
     accDist += closeSeg.distKm;
     routeSegments.push({ coords: closeSeg.coords, dist: closeSeg.distKm });
-    allSegs.push(closeSeg.coords);
+    allSegs.push({ coords: closeSeg.coords, maneuvers: closeSeg.maneuvers });
     totalDistKm = accDist;
 
-    // Draw outbound half (segments 0,1) as one offset polyline
-    // and return half (segments 2,3) as another, offset in opposite direction
-    // This guarantees visual separation regardless of travel direction
     const half = Math.ceil(allSegs.length / 2);
-    const outboundCoords = allSegs.slice(0, half).flat();
-    const returnCoords = allSegs.slice(half).flat();
+    const outboundCoords = allSegs.slice(0, half).flatMap(s => s.coords);
+    const returnCoords = allSegs.slice(half).flatMap(s => s.coords);
+    const fullCoords = allSegs.flatMap(s => s.coords);
 
-    // Draw single center line for full route
-    const fullCoords = allSegs.flat();
     L.polyline(fullCoords, { color: '#e8521a', weight: 3, opacity: 0.85 }).addTo(routeLayer);
-    // Draw directional arrows: outbound offset left, return offset right
     drawArrows(outboundCoords, -1);
     drawArrows(returnCoords, -1);
+    allSegs.forEach(s => drawManeuvers(s.maneuvers));
 
     redrawKmMarkers();
     updateWaypointsList();
