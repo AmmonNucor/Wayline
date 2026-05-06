@@ -54,8 +54,11 @@
   }
   @media (max-width: 680px) {
     #main { flex-direction: column; }
-    #sidebar { width: 100%; height: 45vh; border-right: none; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    #map-wrap { flex: 1; min-height: 55vh; }
+    #sidebar { width: 100%; height: 45vh; border-right: none; border-bottom: 1px solid var(--border); flex-shrink: 0; transition: height .3s ease; overflow: hidden; }
+    #sidebar.collapsed { height: 0; border-bottom: none; }
+    #map-wrap { flex: 1; min-height: 55vh; transition: min-height .3s ease; }
+    #main.sidebar-collapsed #map-wrap { min-height: 100%; }
+    #btn-collapse { display: block !important; }
   }
 
   .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
@@ -183,10 +186,6 @@
   .wl-km { background: var(--ink); width: 10px !important; height: 10px !important; border: 2px solid #fff !important; box-shadow: 0 1px 4px rgba(0,0,0,0.25) !important; }
   .km-label { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: var(--ink); color: var(--paper); padding: 2px 5px; border-radius: 4px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
 
-  /* Road filter chips */
-  .rf-chip { display:flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; background:var(--paper2); border:1.5px solid var(--border); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; }
-  .rf-chip input { accent-color:var(--accent); cursor:pointer; }
-  .rf-chip:has(input:checked) { background:var(--accent); color:#fff; border-color:var(--accent); }
 
   /* Snap toggle */
   .snap-toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
@@ -222,6 +221,7 @@
         <div class="hstat-lbl">waypoints</div>
       </div>
       <button onclick="toggleSettings()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:20px;cursor:pointer;padding:0 0 0 12px;line-height:1" title="Settings">⚙</button>
+      <button onclick="toggleSidebar()" id="btn-collapse" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:18px;cursor:pointer;padding:0 0 0 10px;line-height:1;display:none" title="Toggle panel">⬆</button>
     </div>
   </div>
 
@@ -246,19 +246,6 @@
         </div>
         <button class="action-btn primary" id="btn-gen-loop" onclick="generateLoop()" disabled>Generate loop</button>
         <p style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5">Click the map to set a start point, then click Generate loop.</p>
-      </div>
-
-      <!-- Road filters -->
-      <div class="sidebar-section">
-        <div class="section-title">Avoid road types</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px" id="road-filters">
-          <label class="rf-chip"><input type="checkbox" value="motorway" onchange="updateRoadFilters()"> Motorway</label>
-          <label class="rf-chip"><input type="checkbox" value="trunk" onchange="updateRoadFilters()"> Trunk</label>
-          <label class="rf-chip"><input type="checkbox" value="primary" onchange="updateRoadFilters()"> Primary</label>
-          <label class="rf-chip"><input type="checkbox" value="secondary" onchange="updateRoadFilters()"> Secondary</label>
-          <label class="rf-chip"><input type="checkbox" value="ferry" onchange="updateRoadFilters()"> Ferry</label>
-        </div>
-        <div style="font-size:11px;color:var(--text3)">Requires GraphHopper API key (see ⚙ settings)</div>
       </div>
 
       <!-- Units -->
@@ -324,15 +311,9 @@
   </div>
 
   <!-- Settings panel -->
-  <div id="settings-panel" style="display:none;position:fixed;top:52px;right:0;width:300px;background:var(--paper);border-left:1px solid var(--border);border-bottom:1px solid var(--border);border-radius:0 0 0 var(--r);box-shadow:var(--shadow);z-index:800;padding:16px">
-    <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:12px">Routing</div>
-    <div style="font-size:13px;font-weight:500;margin-bottom:4px">GraphHopper API Key</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Free at graphhopper.com/dashboard — enables road type filtering</div>
-    <input type="text" id="gh-api-key" placeholder="Paste API key here…"
-      style="width:100%;background:var(--paper2);border:1.5px solid var(--border);color:var(--text);padding:8px 10px;border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;outline:none"
-      oninput="settings.ghKey=this.value.trim();saveSettings()">
-    <div style="margin-top:16px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">About</div>
-    <div style="font-size:12px;color:var(--text2)">Wayline v1.0 · Maps by OpenStreetMap · Routing: OSRM / GraphHopper</div>
+  <div id="settings-panel" style="display:none;position:fixed;top:52px;right:0;width:260px;background:var(--paper);border-left:1px solid var(--border);border-bottom:1px solid var(--border);border-radius:0 0 0 var(--r);box-shadow:var(--shadow);z-index:800;padding:16px">
+    <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">About</div>
+    <div style="font-size:12px;color:var(--text2)">Wayline v1.0 · Maps by OpenStreetMap · Routing by OSRM</div>
   </div>
 
   <div id="status-bar">
@@ -356,8 +337,6 @@ let loopUnit = 'km';
 let distUnit = 'km';
 let snapEnabled = true;
 let totalDistKm = 0;
-let avoidRoads = [];
-let settings = JSON.parse(localStorage.getItem('wayline_settings') || '{}');
 
 // ── MAP INIT ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -470,43 +449,12 @@ function gotoMyLocation() {
 }
 
 // ── OSRM ROUTING ──
-function updateRoadFilters() {
-  avoidRoads = [...document.querySelectorAll('#road-filters input:checked')].map(el => el.value);
-}
 
-function saveSettings() {
-  localStorage.setItem('wayline_settings', JSON.stringify(settings));
-}
 
-async function getRouteGH(from, to) {
-  const key = settings.ghKey;
-  if (!key) throw new Error('No GraphHopper key');
-  const avoidStr = avoidRoads.map(r => `avoid_features=${r}`).join('&');
-  const url = `https://graphhopper.com/api/1/route?point=${from.lat},${from.lon}&point=${to.lat},${to.lon}&profile=foot&points_encoded=false&${avoidStr}&key=${key}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const resp = await fetch(url, { signal: controller.signal });
-    clearTimeout(timer);
-    const data = await resp.json();
-    if (data.message) throw new Error('GH: ' + data.message);
-    const pts = data.paths[0].points.coordinates;
-    return {
-      coords: pts.map(c => [c[1], c[0]]),
-      distKm: data.paths[0].distance / 1000
-    };
-  } catch(e) {
-    clearTimeout(timer);
-    throw e;
-  }
 }
 
 async function getRoute(from, to) {
-  // Use GraphHopper if API key is set and road filters are active
-  if (settings.ghKey && avoidRoads.length > 0) {
-    return await getRouteGH(from, to);
-  }
-  // Default: OSRM (free, no key needed)
+  // OSRM routing
   const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
@@ -935,6 +883,17 @@ async function removeWaypoint(i) {
 
 // ── INIT ──
 // Try to get user location for initial map centre
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const main = document.getElementById('main');
+  const btn = document.getElementById('btn-collapse');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  main.classList.toggle('sidebar-collapsed', collapsed);
+  btn.textContent = collapsed ? '⬇' : '⬆';
+  btn.title = collapsed ? 'Show panel' : 'Hide panel';
+  setTimeout(() => map && map.invalidateSize(), 320);
+}
+
 function toggleSettings() {
   const p = document.getElementById('settings-panel');
   p.style.display = p.style.display === 'none' ? 'block' : 'none';
@@ -947,8 +906,6 @@ document.addEventListener('click', e => {
   }
 });
 
-// Restore settings
-if (settings.ghKey) document.getElementById('gh-api-key').value = settings.ghKey;
 
 navigator.geolocation && navigator.geolocation.getCurrentPosition(
   pos => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
