@@ -439,13 +439,21 @@ function gotoMyLocation() {
 // ── OSRM ROUTING ──
 async function getRoute(from, to) {
   const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
-  const resp = await fetch(url);
-  const data = await resp.json();
-  if (data.code !== 'Ok') throw new Error('Routing failed');
-  return {
-    coords: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
-    distKm: data.routes[0].distance / 1000
-  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    const data = await resp.json();
+    if (data.code !== 'Ok') throw new Error('OSRM: ' + data.code);
+    return {
+      coords: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
+      distKm: data.routes[0].distance / 1000
+    };
+  } catch(e) {
+    clearTimeout(timer);
+    throw e;
+  }
 }
 
 // ── MAP CLICK ──
@@ -609,28 +617,43 @@ async function generateLoop() {
   spin(true);
   setStatus('Generating loop...', 'working');
 
-  // Clear existing route but keep start marker
   const start = waypoints[0];
   clearAll(true);
   addWaypointMarker(start, 0);
   waypoints = [start];
 
-  // Strategy: place 3 intermediate waypoints in a rough diamond shape
-  // sized so the total road distance ≈ targetKm
-  // Radius in degrees ≈ targetKm / (4 * 111)
-  const radius = (targetKm / 4) / 111;
-  const candidates = [
-    { lat: start.lat + radius,     lon: start.lon + radius * 0.4 },
-    { lat: start.lat + radius * 0.4, lon: start.lon + radius },
-    { lat: start.lat - radius * 0.2, lon: start.lon + radius * 0.9 },
-  ];
+  // Place 3 waypoints evenly around a circle so the loop is balanced
+  // Road distance is typically ~20% longer than straight line, so scale radius accordingly
+  const straightRadius = (targetKm / (2 * Math.PI)) * 0.8;
+  const degLat = straightRadius / 111;
+  const degLon = straightRadius / (111 * Math.cos(start.lat * Math.PI / 180));
+
+  // N, E, S — 3 points at 0°, 120°, 240° around the circle
+  const angles = [0, 120, 240];
+  const candidates = angles.map(a => {
+    const rad = a * Math.PI / 180;
+    return {
+      lat: start.lat + degLat * Math.cos(rad),
+      lon: start.lon + degLon * Math.sin(rad)
+    };
+  });
 
   try {
     let accDist = 0;
     let prev = start;
+
     for (let i = 0; i < candidates.length; i++) {
       const pt = candidates[i];
-      const seg = await getRoute(prev, pt);
+      setStatus(`Routing segment ${i+1} of 4...`, 'working');
+      let seg;
+      try {
+        seg = await getRoute(prev, pt);
+      } catch(e) {
+        // Fallback to straight line if OSRM fails for this segment
+        const dist = haversine(prev, pt);
+        seg = { coords: [[prev.lat,prev.lon],[pt.lat,pt.lon]], distKm: dist };
+        setStatus(`Segment ${i+1}: using straight line (routing unavailable)`, '');
+      }
       addWaypointMarker(pt, waypoints.length);
       waypoints.push(pt);
       drawSegment(seg.coords, false);
@@ -638,31 +661,40 @@ async function generateLoop() {
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
       prev = pt;
     }
-    // Close the loop back to start
-    const closeSeg = await getRoute(prev, start);
+
+    // Close loop back to start
+    setStatus('Closing loop...', 'working');
+    let closeSeg;
+    try {
+      closeSeg = await getRoute(prev, start);
+    } catch(e) {
+      const dist = haversine(prev, start);
+      closeSeg = { coords: [[prev.lat,prev.lon],[start.lat,start.lon]], distKm: dist };
+    }
     drawSegment(closeSeg.coords, false);
     accDist += closeSeg.distKm;
     routeSegments.push({ coords: closeSeg.coords, dist: closeSeg.distKm });
     totalDistKm = accDist;
+
     redrawKmMarkers();
     updateWaypointsList();
     updateHeaderStats();
     updateButtons();
 
+    // Fit map to route
+    let bounds = null;
+    routeLayer.eachLayer(l => { if(l.getBounds) bounds = bounds ? bounds.extend(l.getBounds()) : l.getBounds(); });
+    if (bounds) map.fitBounds(bounds, { padding: [40, 40] });
+
     const diff = Math.abs(accDist - targetKm);
     const pct = Math.round((diff / targetKm) * 100);
-    setStatus(`Loop generated: ${fmtDist(accDist)} (target was ${fmtDist(targetKm)}, ${pct}% off)`, 'ok');
-    map.fitBounds(routeLayer.getLayers()[0]?.getBounds ? (() => {
-      let bounds = null;
-      routeLayer.eachLayer(l => { if(l.getBounds) bounds = bounds ? bounds.extend(l.getBounds()) : l.getBounds(); });
-      return bounds;
-    })() : map.getBounds(), { padding: [40, 40] });
-
-    if (pct > 20) showToast(`Route is ~${pct}% off target — try adjusting distance`);
+    setStatus(`Loop generated: ${fmtDist(accDist)} (target ${fmtDist(targetKm)}, ${pct > 5 ? '~'+pct+'% off' : 'on target'})`, 'ok');
+    if (pct > 25) showToast(`Route is ~${pct}% off target — try adjusting the distance`);
 
   } catch(e) {
-    setStatus('Loop generation failed — try a different location.', '');
-    showToast('Could not generate loop here');
+    console.error('Loop generation error:', e);
+    setStatus('Loop generation failed: ' + e.message, '');
+    showToast('Could not generate loop — try a different location');
   }
   spin(false);
 }
