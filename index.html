@@ -727,13 +727,11 @@ function updateButtons() {
 
 function updateWaypointsList() {
   const el = document.getElementById('waypoints-list');
-  const empty = document.getElementById('wp-empty');
+  el.innerHTML = '';
   if (!waypoints.length) {
-    empty.style.display = '';
-    el.innerHTML = ''; el.appendChild(empty);
+    el.innerHTML = '<div id="wp-empty" style="font-size:13px;color:var(--text3);padding:8px 0">Click the map to add waypoints.</div>';
     return;
   }
-  el.innerHTML = '';
   let cumDist = 0;
   waypoints.forEach((wp, i) => {
     if (i > 0 && routeSegments[i-1]) cumDist += routeSegments[i-1].dist;
