@@ -495,7 +495,7 @@ async function addWaypoint(pt) {
     try {
       const seg = await getRoute(prev, pt);
       waypoints.push(pt);
-      drawSegment(seg.coords, false);
+      drawSegment(seg.coords, false, -1);
       totalDistKm += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
       redrawKmMarkers();
@@ -507,7 +507,7 @@ async function addWaypoint(pt) {
       waypoints.push(pt);
       const coords = [[prev.lat, prev.lon],[pt.lat,pt.lon]];
       const dist = haversine(prev, pt);
-      drawSegment(coords, true);
+      drawSegment(coords, true, 0);
       totalDistKm += dist;
       routeSegments.push({ coords, dist });
       redrawKmMarkers();
@@ -520,7 +520,7 @@ async function addWaypoint(pt) {
     waypoints.push(pt);
     const coords = [[prev.lat, prev.lon],[pt.lat,pt.lon]];
     const dist = haversine(prev, pt);
-    drawSegment(coords, false);
+    drawSegment(coords, false, 0);
     totalDistKm += dist;
     routeSegments.push({ coords, dist });
     redrawKmMarkers();
@@ -544,11 +544,9 @@ function addWaypointMarker(pt, idx) {
   pt.marker = marker;
 }
 
-function drawSegment(coords, dashed) {
-  const segIndex = routeSegments.length; // index of segment being added
-  // Offset: even segments shift left (-3), odd shift right (+3)
-  // This separates any road travelled in both directions
-  const offsetPx = segIndex % 2 === 0 ? -8 : 8;
+function drawSegment(coords, dashed, offsetDir) {
+  // offsetDir: -1 = left (outbound), +1 = right (return), 0 = centre (straight lines)
+  const offsetPx = (offsetDir || 0) * 8;
   const line = L.polyline(coords, {
     color: '#e8521a', weight: 4, opacity: 0.85,
     dashArray: dashed ? '8,6' : null,
@@ -660,7 +658,9 @@ async function generateLoop() {
       }
       addWaypointMarker(pt, waypoints.length);
       waypoints.push(pt);
-      drawSegment(seg.coords, false);
+      // First half of loop = outbound (left), second half = return (right)
+      const loopOffset = i < Math.ceil(candidates.length / 2) ? -1 : 1;
+      drawSegment(seg.coords, false, loopOffset);
       accDist += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
       prev = pt;
@@ -675,7 +675,7 @@ async function generateLoop() {
       const dist = haversine(prev, start);
       closeSeg = { coords: [[prev.lat,prev.lon],[start.lat,start.lon]], distKm: dist };
     }
-    drawSegment(closeSeg.coords, false);
+    drawSegment(closeSeg.coords, false, 1);
     accDist += closeSeg.distKm;
     routeSegments.push({ coords: closeSeg.coords, dist: closeSeg.distKm });
     totalDistKm = accDist;
