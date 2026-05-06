@@ -643,6 +643,7 @@ async function generateLoop() {
   try {
     let accDist = 0;
     let prev = start;
+    const allSegs = [];
 
     for (let i = 0; i < candidates.length; i++) {
       const pt = candidates[i];
@@ -651,18 +652,15 @@ async function generateLoop() {
       try {
         seg = await getRoute(prev, pt);
       } catch(e) {
-        // Fallback to straight line if OSRM fails for this segment
         const dist = haversine(prev, pt);
         seg = { coords: [[prev.lat,prev.lon],[pt.lat,pt.lon]], distKm: dist };
         setStatus(`Segment ${i+1}: using straight line (routing unavailable)`, '');
       }
       addWaypointMarker(pt, waypoints.length);
       waypoints.push(pt);
-      // First half of loop = outbound (left), second half = return (right)
-      const loopOffset = i < Math.ceil(candidates.length / 2) ? -1 : 1;
-      drawSegment(seg.coords, false, loopOffset);
       accDist += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
+      allSegs.push(seg.coords);
       prev = pt;
     }
 
@@ -675,10 +673,22 @@ async function generateLoop() {
       const dist = haversine(prev, start);
       closeSeg = { coords: [[prev.lat,prev.lon],[start.lat,start.lon]], distKm: dist };
     }
-    drawSegment(closeSeg.coords, false, 1);
     accDist += closeSeg.distKm;
     routeSegments.push({ coords: closeSeg.coords, dist: closeSeg.distKm });
+    allSegs.push(closeSeg.coords);
     totalDistKm = accDist;
+
+    // Draw outbound half (segments 0,1) as one offset polyline
+    // and return half (segments 2,3) as another, offset in opposite direction
+    // This guarantees visual separation regardless of travel direction
+    const half = Math.ceil(allSegs.length / 2);
+    const outboundCoords = allSegs.slice(0, half).flat();
+    const returnCoords = allSegs.slice(half).flat();
+
+    // Both lines use the same offset direction — because they travel opposite directions,
+    // the same offset value places them on opposite sides of the road centerline
+    L.polyline(outboundCoords, { color: '#e8521a', weight: 4, opacity: 0.9, offset: -8 }).addTo(routeLayer);
+    L.polyline(returnCoords, { color: '#e8521a', weight: 4, opacity: 0.9, offset: -8 }).addTo(routeLayer);
 
     redrawKmMarkers();
     updateWaypointsList();
