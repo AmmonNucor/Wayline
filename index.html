@@ -354,6 +354,7 @@ routeLayer = L.layerGroup().addTo(map);
 kmLayer = L.layerGroup().addTo(map);
 
 map.on('click', onMapClick);
+}); // end DOMContentLoaded
 
 // ── HINT ──
 function setHint(txt) { document.getElementById('map-hint').textContent = txt; }
@@ -766,7 +767,7 @@ navigator.geolocation && navigator.geolocation.getCurrentPosition(
   pos => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
   () => {}
 );
-}); // end DOMContentLoaded
+
 </script>
 </body>
 </html>
