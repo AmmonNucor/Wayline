@@ -545,13 +545,70 @@ function addWaypointMarker(pt, idx) {
 }
 
 function drawSegment(coords, dashed, offsetDir) {
-  // offsetDir: -1 = left (outbound), +1 = right (return), 0 = centre (straight lines)
-  const offsetPx = (offsetDir || 0) * 8;
-  const line = L.polyline(coords, {
-    color: '#e8521a', weight: 4, opacity: 0.85,
-    dashArray: dashed ? '8,6' : null,
-    offset: offsetPx
+  // Draw center line
+  L.polyline(coords, {
+    color: '#e8521a', weight: 3, opacity: 0.85,
+    dashArray: dashed ? '8,6' : null
   }).addTo(routeLayer);
+  // Draw directional arrows offset from center line
+  if (!dashed) drawArrows(coords, -1);
+}
+
+function drawArrows(coords, offsetDir) {
+  if (coords.length < 2) return;
+  const ARROW_EVERY_M = 80; // place an arrow every ~80 map units
+  const OFFSET = 8; // pixels offset from line center
+  let cumDist = 0, nextArrow = ARROW_EVERY_M / 2;
+
+  for (let i = 1; i < coords.length; i++) {
+    const a = L.latLng(coords[i-1]);
+    const b = L.latLng(coords[i]);
+    const segDist = a.distanceTo(b);
+    cumDist += segDist;
+
+    while (cumDist >= nextArrow) {
+      const frac = 1 - (cumDist - nextArrow) / segDist;
+      const lat = coords[i-1][0] + (coords[i][0] - coords[i-1][0]) * frac;
+      const lon = coords[i-1][1] + (coords[i][1] - coords[i-1][1]) * frac;
+
+      // Bearing of segment in degrees
+      const dLon = (coords[i][1] - coords[i-1][1]) * Math.PI / 180;
+      const lat1 = coords[i-1][0] * Math.PI / 180;
+      const lat2 = coords[i][0] * Math.PI / 180;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      const bearing = Math.atan2(y, x) * 180 / Math.PI;
+
+      // Arrow pointing in direction of travel, rotated to bearing
+      const arrowHtml = `<div style="
+        width:0; height:0;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-bottom: 10px solid #e8521a;
+        opacity: 0.9;
+        transform: rotate(${bearing}deg);
+        transform-origin: center center;
+        margin-left: -5px;
+        margin-top: -5px;
+      "></div>`;
+
+      const icon = L.divIcon({
+        className: '',
+        html: arrowHtml,
+        iconSize: [10, 10],
+        iconAnchor: [5, 5]
+      });
+
+      // Offset the arrow perpendicular to the bearing
+      const perpBearing = (bearing + 90) * Math.PI / 180;
+      const offsetDeg = OFFSET * 0.000009; // rough pixel-to-degree conversion
+      const offsetLat = -Math.cos(perpBearing) * offsetDeg * offsetDir;
+      const offsetLon = Math.sin(perpBearing) * offsetDeg * offsetDir / Math.cos(lat * Math.PI / 180);
+
+      L.marker([lat + offsetLat, lon + offsetLon], { icon, zIndexOffset: 200, interactive: false }).addTo(routeLayer);
+      nextArrow += ARROW_EVERY_M;
+    }
+  }
 }
 
 // ── KM MARKERS ──
@@ -685,10 +742,12 @@ async function generateLoop() {
     const outboundCoords = allSegs.slice(0, half).flat();
     const returnCoords = allSegs.slice(half).flat();
 
-    // Both lines use the same offset direction — because they travel opposite directions,
-    // the same offset value places them on opposite sides of the road centerline
-    L.polyline(outboundCoords, { color: '#e8521a', weight: 4, opacity: 0.9, offset: -8 }).addTo(routeLayer);
-    L.polyline(returnCoords, { color: '#e8521a', weight: 4, opacity: 0.9, offset: -8 }).addTo(routeLayer);
+    // Draw single center line for full route
+    const fullCoords = allSegs.flat();
+    L.polyline(fullCoords, { color: '#e8521a', weight: 3, opacity: 0.85 }).addTo(routeLayer);
+    // Draw directional arrows: outbound offset left, return offset right
+    drawArrows(outboundCoords, -1);
+    drawArrows(returnCoords, -1);
 
     redrawKmMarkers();
     updateWaypointsList();
