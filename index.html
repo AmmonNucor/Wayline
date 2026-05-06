@@ -54,11 +54,8 @@
   }
   @media (max-width: 680px) {
     #main { flex-direction: column; }
-    #sidebar { width: 100%; height: 45vh; border-right: none; border-bottom: 1px solid var(--border); flex-shrink: 0; transition: height .3s ease; overflow: hidden; }
-    #sidebar.collapsed { height: 0; border-bottom: none; }
-    #map-wrap { flex: 1; min-height: 55vh; transition: min-height .3s ease; }
-    #main.sidebar-collapsed #map-wrap { min-height: 100%; }
-    #btn-collapse { display: block !important; }
+    #sidebar { width: 100%; height: 45vh; border-right: none; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    #map-wrap { flex: 1; min-height: 55vh; }
   }
 
   .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
@@ -186,7 +183,6 @@
   .wl-km { background: var(--ink); width: 10px !important; height: 10px !important; border: 2px solid #fff !important; box-shadow: 0 1px 4px rgba(0,0,0,0.25) !important; }
   .km-label { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: var(--ink); color: var(--paper); padding: 2px 5px; border-radius: 4px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
 
-
   /* Snap toggle */
   .snap-toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
   .snap-toggle input { opacity: 0; width: 0; height: 0; }
@@ -220,8 +216,6 @@
         <div class="hstat-val" id="h-pts">0</div>
         <div class="hstat-lbl">waypoints</div>
       </div>
-      <button onclick="toggleSettings()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:20px;cursor:pointer;padding:0 0 0 12px;line-height:1" title="Settings">⚙</button>
-      <button onclick="toggleSidebar()" id="btn-collapse" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:18px;cursor:pointer;padding:0 0 0 10px;line-height:1;display:none" title="Toggle panel">⬆</button>
     </div>
   </div>
 
@@ -242,7 +236,10 @@
         <div class="section-title">Target distance</div>
         <div class="dist-row">
           <input type="number" class="dist-input" id="loop-dist" value="1" min="0.5" max="100" step="0.5">
-          <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text2);padding:0 4px" id="loop-unit-label">km</span>
+          <div class="dist-unit-toggle">
+            <button class="dut active" id="dut-km" onclick="setLoopUnit('km')">km</button>
+            <button class="dut" id="dut-mi" onclick="setLoopUnit('mi')">mi</button>
+          </div>
         </div>
         <button class="action-btn primary" id="btn-gen-loop" onclick="generateLoop()" disabled>Generate loop</button>
         <p style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5">Click the map to set a start point, then click Generate loop.</p>
@@ -283,7 +280,6 @@
             <span class="snap-slider"></span>
           </label>
         </div>
-
         <div id="waypoints-list">
           <div id="wp-empty">Click the map to add waypoints.</div>
         </div>
@@ -308,12 +304,6 @@
       <div id="map-hint">Click anywhere on the map to add a waypoint</div>
       <div id="spinner"><div class="spin"></div></div>
     </div>
-  </div>
-
-  <!-- Settings panel -->
-  <div id="settings-panel" style="display:none;position:fixed;top:52px;right:0;width:260px;background:var(--paper);border-left:1px solid var(--border);border-bottom:1px solid var(--border);border-radius:0 0 0 var(--r);box-shadow:var(--shadow);z-index:800;padding:16px">
-    <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">About</div>
-    <div style="font-size:12px;color:var(--text2)">Wayline v1.0 · Maps by OpenStreetMap · Routing by OSRM</div>
   </div>
 
   <div id="status-bar">
@@ -449,13 +439,8 @@ function gotoMyLocation() {
 }
 
 // ── OSRM ROUTING ──
-
-
-}
-
 async function getRoute(from, to) {
-  // OSRM routing
-  const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
+  const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson&steps=true`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
@@ -463,9 +448,29 @@ async function getRoute(from, to) {
     clearTimeout(timer);
     const data = await resp.json();
     if (data.code !== 'Ok') throw new Error('OSRM: ' + data.code);
+    // Extract turn maneuvers from steps
+    const maneuvers = [];
+    const legs = data.routes[0].legs || [];
+    legs.forEach(leg => {
+      (leg.steps || []).forEach(step => {
+        const m = step.maneuver;
+        if (!m) return;
+        // Skip depart, arrive, and straight-on movements
+        if (['depart','arrive'].includes(m.type)) return;
+        if (!m.modifier || m.modifier === 'straight') return;
+        console.log('maneuver:', m.type, m.modifier, m.location);
+        maneuvers.push({
+          lat: m.location[1],
+          lon: m.location[0],
+          type: m.type,
+          modifier: m.modifier
+        });
+      });
+    });
     return {
       coords: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
-      distKm: data.routes[0].distance / 1000
+      distKm: data.routes[0].distance / 1000,
+      maneuvers
     };
   } catch(e) {
     clearTimeout(timer);
@@ -511,6 +516,7 @@ async function addWaypoint(pt) {
       const seg = await getRoute(prev, pt);
       waypoints.push(pt);
       drawSegment(seg.coords, false, -1);
+      drawManeuvers(seg.maneuvers);
       totalDistKm += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
       redrawKmMarkers();
@@ -628,7 +634,47 @@ function drawArrows(coords, offsetDir) {
 }
 
 // ── TURN ARROWS ──
+function drawManeuvers(maneuvers) {
+  if (!maneuvers || !maneuvers.length) return;
+  maneuvers.forEach(m => {
+    const svg = getTurnSVG(m.modifier);
+    if (!svg) return;
+    const icon = L.divIcon({
+      className: '',
+      html: svg,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    L.marker([m.lat, m.lon], { icon, zIndexOffset: 400, interactive: false }).addTo(routeLayer);
+  });
+}
 
+function getTurnSVG(modifier) {
+  const col = '#1a56db';
+  const s = 28;
+  const bg = `<circle cx="14" cy="14" r="13" fill="white" stroke="${col}" stroke-width="2" opacity="0.95"/>`;
+
+  // Helper: curved turn arrow going up then curving left or right
+  const left  = `<path d="M17 22 L17 13 Q17 6 10 6 L7 6 M7 6 L10 3 M7 6 L10 9" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const sleft = `<path d="M17 22 L17 14 Q16 8 10 8 L8 5 M8 5 L11 4 M8 5 L7 8" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const right = `<path d="M11 22 L11 13 Q11 6 18 6 L21 6 M21 6 L18 3 M21 6 L18 9" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const sright= `<path d="M11 22 L11 14 Q12 8 18 8 L20 5 M20 5 L17 4 M20 5 L21 8" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const uturn = `<path d="M10 22 L10 12 Q10 5 17 5 Q24 5 24 12 L21 12 M24 12 L21 15" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const fwd   = `<path d="M14 20 L14 8 M14 8 L10 12 M14 8 L18 12" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  let arrow;
+  switch(modifier) {
+    case 'sharp left':
+    case 'left':       arrow = left;   break;
+    case 'slight left':arrow = sleft;  break;
+    case 'sharp right':
+    case 'right':      arrow = right;  break;
+    case 'slight right':arrow = sright; break;
+    case 'uturn':      arrow = uturn;  break;
+    default:           arrow = fwd;    break; // catch-all for any modifier
+  }
+  return `<svg width="${s}" height="${s}" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">${bg}${arrow}</svg>`;
+}
 
 // ── KM MARKERS ──
 function haversine(a, b) {
@@ -670,14 +716,19 @@ function redrawKmMarkers() {
 }
 
 // ── LOOP GENERATION ──
+function setLoopUnit(u) {
+  loopUnit = u;
+  if(document.getElementById('dut-km')) document.getElementById('dut-km').classList.toggle('active', u === 'km');
+  if(document.getElementById('dut-mi')) document.getElementById('dut-mi').classList.toggle('active', u === 'mi');
+}
 
 function setDistUnit(u) {
   distUnit = u;
   loopUnit = u;
   document.getElementById('unit-km').classList.toggle('active', u === 'km');
   document.getElementById('unit-mi').classList.toggle('active', u === 'mi');
-  const lbl = document.getElementById('loop-unit-label');
-  if (lbl) lbl.textContent = u;
+  if(document.getElementById('dut-km')) document.getElementById('dut-km').classList.toggle('active', u === 'km');
+  if(document.getElementById('dut-mi')) document.getElementById('dut-mi').classList.toggle('active', u === 'mi');
   updateUnitDisplay();
 }
 
@@ -731,7 +782,7 @@ async function generateLoop() {
       waypoints.push(pt);
       accDist += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
-      allSegs.push(seg.coords);
+      allSegs.push({ coords: seg.coords, maneuvers: seg.maneuvers });
       prev = pt;
     }
 
@@ -746,18 +797,18 @@ async function generateLoop() {
     }
     accDist += closeSeg.distKm;
     routeSegments.push({ coords: closeSeg.coords, dist: closeSeg.distKm });
-    allSegs.push(closeSeg.coords);
+    allSegs.push({ coords: closeSeg.coords, maneuvers: closeSeg.maneuvers });
     totalDistKm = accDist;
 
     const half = Math.ceil(allSegs.length / 2);
-    const outboundCoords = allSegs.slice(0, half).reduce((a, b) => a.concat(b), []);
-    const returnCoords = allSegs.slice(half).reduce((a, b) => a.concat(b), []);
-    const fullCoords = allSegs.reduce((a, b) => a.concat(b), []);
+    const outboundCoords = allSegs.slice(0, half).flatMap(s => s.coords);
+    const returnCoords = allSegs.slice(half).flatMap(s => s.coords);
+    const fullCoords = allSegs.flatMap(s => s.coords);
 
     L.polyline(fullCoords, { color: '#e8521a', weight: 3, opacity: 0.85 }).addTo(routeLayer);
     drawArrows(outboundCoords, -1);
     drawArrows(returnCoords, -1);
-
+    allSegs.forEach(s => drawManeuvers(s.maneuvers));
 
     redrawKmMarkers();
     updateWaypointsList();
@@ -883,30 +934,6 @@ async function removeWaypoint(i) {
 
 // ── INIT ──
 // Try to get user location for initial map centre
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const main = document.getElementById('main');
-  const btn = document.getElementById('btn-collapse');
-  const collapsed = sidebar.classList.toggle('collapsed');
-  main.classList.toggle('sidebar-collapsed', collapsed);
-  btn.textContent = collapsed ? '⬇' : '⬆';
-  btn.title = collapsed ? 'Show panel' : 'Hide panel';
-  setTimeout(() => map && map.invalidateSize(), 320);
-}
-
-function toggleSettings() {
-  const p = document.getElementById('settings-panel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
-}
-// Close settings when clicking outside
-document.addEventListener('click', e => {
-  const panel = document.getElementById('settings-panel');
-  if (panel.style.display === 'block' && !panel.contains(e.target) && !e.target.closest('#header')) {
-    panel.style.display = 'none';
-  }
-});
-
-
 navigator.geolocation && navigator.geolocation.getCurrentPosition(
   pos => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
   () => {}
