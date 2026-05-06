@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0d0d0f">
+<title>Wayline — Route Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  :root {
+    --ink: #0d0d0f;
+    --paper: #f5f3ee;
+    --paper2: #ede9e0;
+    --paper3: #e2ddd3;
+    --accent: #e8521a;
+    --accent2: #2563eb;
+    --text: #1a1a1f;
+    --text2: #6b6870;
+    --text3: #a8a5b0;
+    --border: rgba(0,0,0,0.1);
+    --shadow: 0 2px 12px rgba(0,0,0,0.12);
+    --r: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--paper); color: var(--text); font-family: 'DM Sans', sans-serif; overflow: hidden; }
+
+  /* Layout */
+  #app { display: flex; flex-direction: column; height: 100dvh; height: 100vh; }
+
+  /* Header */
+  #header {
+    background: var(--ink); color: var(--paper);
+    padding: 12px 20px; display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0; z-index: 100;
+  }
+  #logo { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+  #logo span { color: var(--accent); }
+  #header-stats { display: flex; gap: 20px; }
+  .hstat { text-align: right; }
+  .hstat-val { font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700; line-height: 1; color: var(--paper); }
+  .hstat-lbl { font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: .08em; text-transform: uppercase; margin-top: 1px; }
+
+  /* Main area */
+  #main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+  /* Sidebar */
+  #sidebar {
+    width: 300px; background: var(--paper); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto;
+    z-index: 50;
+  }
+  @media (max-width: 680px) {
+    #main { flex-direction: column; }
+    #sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; }
+  }
+
+  .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
+  .sidebar-section:last-child { border-bottom: none; }
+  .section-title {
+    font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--text3); margin-bottom: 12px;
+  }
+
+  /* Mode toggle */
+  #mode-toggle { display: flex; background: var(--paper2); border-radius: var(--r); padding: 3px; gap: 2px; }
+  .mode-btn {
+    flex: 1; padding: 8px 0; border-radius: 8px; border: none; background: transparent;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; color: var(--text2);
+    cursor: pointer; transition: all .15s; text-align: center;
+  }
+  .mode-btn.active { background: var(--ink); color: var(--paper); box-shadow: var(--shadow); }
+
+  /* Search */
+  #search-wrap { position: relative; margin-bottom: 10px; }
+  #location-search {
+    width: 100%; padding: 10px 36px 10px 12px; border-radius: var(--r);
+    border: 1.5px solid var(--border); background: var(--paper2);
+    font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text);
+    outline: none; transition: border-color .15s;
+  }
+  #location-search:focus { border-color: var(--accent); }
+  #search-btn {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; color: var(--text3); font-size: 16px;
+  }
+  #search-results {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 200;
+    background: var(--paper); border: 1.5px solid var(--border); border-radius: var(--r);
+    box-shadow: var(--shadow); max-height: 180px; overflow-y: auto; display: none;
+  }
+  .search-result { padding: 10px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background .1s; }
+  .search-result:last-child { border-bottom: none; }
+  .search-result:hover { background: var(--paper2); }
+
+  /* Loop distance */
+  #loop-section { display: none; }
+  .dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .dist-input {
+    flex: 1; padding: 10px 12px; border-radius: var(--r);
+    border: 1.5px solid var(--border); background: var(--paper2);
+    font-family: 'Space Mono', monospace; font-size: 16px; color: var(--text);
+    outline: none; transition: border-color .15s;
+  }
+  .dist-input:focus { border-color: var(--accent); }
+  .dist-unit-toggle { display: flex; background: var(--paper2); border-radius: var(--r); overflow: hidden; }
+  .dut { padding: 8px 10px; font-size: 12px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--text2); transition: all .15s; font-family: 'DM Sans', sans-serif; }
+  .dut.active { background: var(--ink); color: var(--paper); }
+
+  /* Waypoints list */
+  #waypoints-list { min-height: 40px; }
+  .wp-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 0;
+    border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .wp-item:last-child { border-bottom: none; }
+  .wp-num {
+    width: 22px; height: 22px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .wp-num.start { background: var(--accent2); }
+  .wp-coords { flex: 1; color: var(--text2); font-family: 'Space Mono', monospace; font-size: 11px; }
+  .wp-dist { font-size: 11px; color: var(--text3); white-space: nowrap; }
+  .wp-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; padding: 2px 4px; transition: color .15s; }
+  .wp-del:hover { color: var(--accent); }
+  #wp-empty { font-size: 13px; color: var(--text3); padding: 8px 0; }
+
+  /* Km markers legend */
+  .marker-legend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); margin-top: 8px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink); border: 2px solid var(--paper); box-shadow: 0 0 0 1.5px var(--ink); flex-shrink: 0; }
+
+  /* Action buttons */
+  .action-btn {
+    width: 100%; padding: 12px; border-radius: var(--r); border: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600;
+    transition: all .15s; margin-bottom: 8px;
+  }
+  .action-btn:last-child { margin-bottom: 0; }
+  .action-btn.primary { background: var(--ink); color: var(--paper); }
+  .action-btn.primary:hover { background: #2a2a30; }
+  .action-btn.secondary { background: var(--paper2); color: var(--text); border: 1.5px solid var(--border); }
+  .action-btn.secondary:hover { background: var(--paper3); }
+  .action-btn.danger { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+  .action-btn.danger:hover { background: var(--accent); color: #fff; }
+  .action-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  /* Map */
+  #map { flex: 1; min-height: 0; cursor: crosshair; }
+
+  /* Floating map hint */
+  #map-hint {
+    position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: rgba(13,13,15,0.85); color: var(--paper); padding: 8px 16px;
+    border-radius: 24px; font-size: 13px; font-weight: 500; pointer-events: none;
+    z-index: 400; white-space: nowrap; backdrop-filter: blur(6px);
+    transition: opacity .3s;
+  }
+
+  /* Status bar */
+  #status-bar {
+    background: var(--ink); color: rgba(255,255,255,0.5); font-size: 12px;
+    padding: 6px 16px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  }
+  #status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  #status-dot.working { background: var(--accent); animation: pulse 1s infinite; }
+  #status-dot.ok { background: #22c55e; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+
+  /* Leaflet overrides */
+  .leaflet-control-zoom a { background: var(--paper) !important; color: var(--ink) !important; border-color: var(--border) !important; font-weight: 700 !important; }
+  .leaflet-control-attribution { font-size: 9px !important; background: rgba(245,243,238,0.8) !important; }
+
+  /* Custom marker styles */
+  .wl-dot { border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+  .wl-start { background: var(--accent2); }
+  .wl-way { background: var(--accent); }
+  .wl-km { background: var(--ink); width: 10px !important; height: 10px !important; border: 2px solid #fff !important; box-shadow: 0 1px 4px rgba(0,0,0,0.25) !important; }
+  .km-label { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: var(--ink); color: var(--paper); padding: 2px 5px; border-radius: 4px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+
+  /* Snap toggle */
+  .snap-toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+  .snap-toggle input { opacity: 0; width: 0; height: 0; }
+  .snap-slider { position: absolute; inset: 0; background: var(--paper3); border-radius: 13px; cursor: pointer; transition: .2s; }
+  .snap-slider:before { content: ''; position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  input:checked + .snap-slider { background: var(--ink); }
+  input:checked + .snap-slider:before { transform: translateX(18px); }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%) translateY(16px); background: var(--ink); color: var(--paper); padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 500; opacity: 0; transition: all .25s; pointer-events: none; white-space: nowrap; z-index: 9999; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Loading spinner overlay */
+  #spinner { position: absolute; inset: 0; background: rgba(245,243,238,0.6); display: none; align-items: center; justify-content: center; z-index: 800; backdrop-filter: blur(2px); }
+  #spinner.show { display: flex; }
+  .spin { width: 36px; height: 36px; border: 3px solid var(--paper3); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="header">
+    <div id="logo">Way<span>line</span></div>
+    <div id="header-stats">
+      <div class="hstat">
+        <div class="hstat-val" id="h-dist">0.0</div>
+        <div class="hstat-lbl" id="h-dist-lbl">km</div>
+      </div>
+      <div class="hstat">
+        <div class="hstat-val" id="h-pts">0</div>
+        <div class="hstat-lbl">waypoints</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="sidebar">
+
+      <!-- Mode -->
+      <div class="sidebar-section">
+        <div class="section-title">Mode</div>
+        <div id="mode-toggle">
+          <button class="mode-btn active" id="mode-click" onclick="setMode('click')">📍 Click to plot</button>
+          <button class="mode-btn" id="mode-loop" onclick="setMode('loop')">🔁 Loop by distance</button>
+        </div>
+      </div>
+
+      <!-- Loop options (shown only in loop mode) -->
+      <div class="sidebar-section" id="loop-section" style="display:none;background:#f0ede6;border-left:3px solid var(--accent)">
+        <div class="section-title">Target distance</div>
+        <div class="dist-row">
+          <input type="number" class="dist-input" id="loop-dist" value="5" min="0.5" max="100" step="0.5">
+          <div class="dist-unit-toggle">
+            <button class="dut active" id="dut-km" onclick="setLoopUnit('km')">km</button>
+            <button class="dut" id="dut-mi" onclick="setLoopUnit('mi')">mi</button>
+          </div>
+        </div>
+        <button class="action-btn primary" id="btn-gen-loop" onclick="generateLoop()" disabled>Generate loop</button>
+        <p style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5">Click the map to set a start point, then click Generate loop.</p>
+      </div>
+
+      <!-- Units -->
+      <div class="sidebar-section">
+        <div class="section-title">Units</div>
+        <div class="dist-unit-toggle" style="width:100%">
+          <button class="dut active" id="unit-km" onclick="setDistUnit('km')" style="flex:1;padding:10px 0">Kilometres (km)</button>
+          <button class="dut" id="unit-mi" onclick="setDistUnit('mi')" style="flex:1;padding:10px 0">Miles (mi)</button>
+        </div>
+      </div>
+
+      <!-- Location search -->
+      <div class="sidebar-section">
+        <div class="section-title">Start location</div>
+        <div id="search-wrap">
+          <input type="text" id="location-search" placeholder="Search a city or address…" onkeydown="if(event.key==='Enter')doSearch()">
+          <button id="search-btn" onclick="doSearch()">⌕</button>
+          <div id="search-results"></div>
+        </div>
+        <button class="action-btn secondary" onclick="gotoMyLocation()">📍 Use my location</button>
+      </div>
+
+
+
+      <!-- Waypoints -->
+      <div class="sidebar-section">
+        <div class="section-title">Waypoints</div>
+        <div id="snap-toggle-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:13px;font-weight:500">Snap to roads</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">Off = straight lines (paths, trails)</div>
+          </div>
+          <label class="snap-toggle">
+            <input type="checkbox" id="snap-checkbox" checked onchange="snapEnabled=this.checked">
+            <span class="snap-slider"></span>
+          </label>
+        </div>
+        <div id="waypoints-list">
+          <div id="wp-empty">Click the map to add waypoints.</div>
+        </div>
+        <div class="marker-legend" style="margin-top:10px">
+          <div class="legend-dot"></div>
+          <span>Distance markers every <span id="legend-interval">1 km</span></span>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="sidebar-section">
+        <div class="section-title">Actions</div>
+        <button class="action-btn secondary" id="btn-reverse" onclick="reverseRoute()" disabled>Reverse route</button>
+        <button class="action-btn danger" id="btn-clear" onclick="clearAll()" disabled>Clear all</button>
+      </div>
+
+    </div>
+
+    <!-- Map container -->
+    <div style="flex:1;position:relative;min-height:0;min-width:0">
+      <div id="map"></div>
+      <div id="map-hint">Click anywhere on the map to add a waypoint</div>
+      <div id="spinner"><div class="spin"></div></div>
+    </div>
+  </div>
+
+  <div id="status-bar">
+    <div id="status-dot"></div>
+    <span id="status-txt">Ready — search for a location or click the map to begin.</span>
+  </div>
+
+</div>
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── STATE ──
+let map, routeLayer, kmLayer;
+let waypoints = []; // [{lat,lon,marker}]
+let routeSegments = []; // polylines between waypoints
+let kmMarkers = [];
+let mode = 'click';
+let loopUnit = 'km';
+let distUnit = 'km';
+let snapEnabled = true;
+let totalDistKm = 0;
+
+// ── MAP INIT ──
+map = L.map('map', { zoomControl: true }).setView([40.0, -95.0], 4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | Routing: OSRM',
+  maxZoom: 19
+}).addTo(map);
+
+routeLayer = L.layerGroup().addTo(map);
+kmLayer = L.layerGroup().addTo(map);
+
+map.on('click', onMapClick);
+
+// ── HINT ──
+function setHint(txt) { document.getElementById('map-hint').textContent = txt; }
+function hideHint() { document.getElementById('map-hint').style.opacity = '0'; }
+function showHint() { document.getElementById('map-hint').style.opacity = '1'; }
+
+// ── STATUS ──
+function setStatus(txt, state) {
+  document.getElementById('status-txt').textContent = txt;
+  document.getElementById('status-dot').className = 'status-dot' + (state ? ' ' + state : '');
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── SPINNER ──
+function spin(on) { document.getElementById('spinner').classList.toggle('show', on); }
+
+// ── MODE ──
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-click').classList.toggle('active', m === 'click');
+  document.getElementById('mode-loop').classList.toggle('active', m === 'loop');
+  document.getElementById('loop-section').style.display = m === 'loop' ? 'block' : 'none';
+  document.getElementById('snap-toggle-row').style.display = m === 'click' ? 'flex' : 'none';
+  if (m === 'click') setHint('Click the map to add waypoints');
+  else setHint('Click the map to set a start point for the loop');
+  try { clearAll(); } catch(e) {}
+}
+
+// ── SEARCH ──
+async function doSearch() {
+  const q = document.getElementById('location-search').value.trim();
+  if (!q) return;
+  setStatus('Searching...', 'working');
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5`;
+    const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    const results = await resp.json();
+    const box = document.getElementById('search-results');
+    if (!results.length) { box.style.display = 'none'; setStatus('No results found.', ''); return; }
+    box.innerHTML = '';
+    results.forEach(r => {
+      const div = document.createElement('div');
+      div.className = 'search-result';
+      div.textContent = r.display_name;
+      div.onclick = () => {
+        map.setView([+r.lat, +r.lon], 14);
+        box.style.display = 'none';
+        document.getElementById('location-search').value = r.display_name.split(',')[0];
+        setStatus('Location found. Click the map to start plotting.', 'ok');
+      };
+      box.appendChild(div);
+    });
+    box.style.display = '';
+    setStatus('Select a result.', '');
+  } catch(e) { setStatus('Search failed.', ''); }
+}
+document.getElementById('location-search').addEventListener('input', () => {
+  if (!document.getElementById('location-search').value) document.getElementById('search-results').style.display = 'none';
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('#search-wrap')) document.getElementById('search-results').style.display = 'none';
+});
+
+function gotoMyLocation() {
+  if (!navigator.geolocation) { showToast('Geolocation not supported'); return; }
+  setStatus('Getting your location...', 'working');
+  navigator.geolocation.getCurrentPosition(pos => {
+    map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+    setStatus('Centred on your location.', 'ok');
+  }, () => setStatus('Could not get location.', ''));
+}
+
+// ── OSRM ROUTING ──
+async function getRoute(from, to) {
+  const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  if (data.code !== 'Ok') throw new Error('Routing failed');
+  return {
+    coords: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
+    distKm: data.routes[0].distance / 1000
+  };
+}
+
+// ── MAP CLICK ──
+async function onMapClick(e) {
+  const pt = { lat: e.latlng.lat, lon: e.latlng.lng };
+  if (mode === 'loop') {
+    // In loop mode, click sets the single start point
+    clearAll(true);
+    addWaypointMarker(pt, 0);
+    waypoints = [pt];
+    document.getElementById('btn-gen-loop').disabled = false;
+    setStatus('Start point set. Adjust distance and click Generate loop.', 'ok');
+    updateWaypointsList();
+    updateHeaderStats();
+    setHint('Start point set — click Generate loop in the sidebar');
+    return;
+  }
+  // Click mode — add waypoint and route to it
+  await addWaypoint(pt);
+}
+
+async function addWaypoint(pt) {
+  const idx = waypoints.length;
+  addWaypointMarker(pt, idx);
+  if (idx === 0) {
+    waypoints.push(pt);
+    updateWaypointsList();
+    updateHeaderStats();
+    setHint('Keep clicking to add more waypoints');
+    setStatus('First waypoint set.', 'ok');
+    return;
+  }
+  spin(true);
+  const prev = waypoints[idx - 1];
+  if (snapEnabled) {
+    setStatus('Snapping to road...', 'working');
+    try {
+      const seg = await getRoute(prev, pt);
+      waypoints.push(pt);
+      drawSegment(seg.coords, false);
+      totalDistKm += seg.distKm;
+      routeSegments.push({ coords: seg.coords, dist: seg.distKm });
+      redrawKmMarkers();
+      updateWaypointsList();
+      updateHeaderStats();
+      setStatus(`Route snapped. Total: ${fmtDist(totalDistKm)}`, 'ok');
+      if (waypoints.length === 2) setHint('Keep adding waypoints — tap Clear to start over');
+    } catch(e) {
+      waypoints.push(pt);
+      const coords = [[prev.lat, prev.lon],[pt.lat,pt.lon]];
+      const dist = haversine(prev, pt);
+      drawSegment(coords, true);
+      totalDistKm += dist;
+      routeSegments.push({ coords, dist });
+      redrawKmMarkers();
+      updateWaypointsList();
+      updateHeaderStats();
+      setStatus('Road snapping failed — used straight line.', '');
+    }
+  } else {
+    // Snap disabled — straight line
+    waypoints.push(pt);
+    const coords = [[prev.lat, prev.lon],[pt.lat,pt.lon]];
+    const dist = haversine(prev, pt);
+    drawSegment(coords, false);
+    totalDistKm += dist;
+    routeSegments.push({ coords, dist });
+    redrawKmMarkers();
+    updateWaypointsList();
+    updateHeaderStats();
+    setStatus(`Waypoint added. Total: ${fmtDist(totalDistKm)}`, 'ok');
+    if (waypoints.length === 2) setHint('Keep adding waypoints — tap Clear to start over');
+  }
+  spin(false);
+  updateButtons();
+}
+
+function addWaypointMarker(pt, idx) {
+  const isStart = idx === 0;
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="wl-dot ${isStart ? 'wl-start' : 'wl-way'}" style="width:14px;height:14px"></div>`,
+    iconSize: [14, 14], iconAnchor: [7, 7]
+  });
+  const marker = L.marker([pt.lat, pt.lon], { icon, zIndexOffset: 500 }).addTo(map);
+  pt.marker = marker;
+}
+
+function drawSegment(coords, dashed) {
+  const line = L.polyline(coords, {
+    color: '#e8521a', weight: 4, opacity: 0.85,
+    dashArray: dashed ? '8,6' : null
+  }).addTo(routeLayer);
+}
+
+// ── KM MARKERS ──
+function haversine(a, b) {
+  const R=6371,dLat=(b.lat-a.lat)*Math.PI/180,dLon=(b.lon-a.lon)*Math.PI/180;
+  const s=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
+}
+
+function redrawKmMarkers() {
+  kmLayer.clearLayers();
+  kmMarkers = [];
+  const interval = distUnit === 'mi' ? 1.60934 : 1;
+  const labelUnit = distUnit === 'mi' ? 'mi' : 'km';
+  // Flatten all segment coords into one path
+  const allCoords = routeSegments.flatMap(s => s.coords);
+  if (allCoords.length < 2) return;
+  let cumDist = 0, nextMark = interval, markNum = 1;
+  for (let i = 1; i < allCoords.length; i++) {
+    const a = { lat: allCoords[i-1][0], lon: allCoords[i-1][1] };
+    const b = { lat: allCoords[i][0], lon: allCoords[i][1] };
+    const seg = haversine(a, b);
+    cumDist += seg;
+    while (cumDist >= nextMark) {
+      // Interpolate exact position
+      const overshoot = cumDist - nextMark;
+      const frac = 1 - overshoot / seg;
+      const lat = a.lat + (b.lat - a.lat) * frac;
+      const lon = a.lon + (b.lon - a.lon) * frac;
+      const dotIcon = L.divIcon({ className: 'wl-km', html: '', iconSize: [10,10], iconAnchor: [5,5] });
+      L.marker([lat, lon], { icon: dotIcon, zIndexOffset: 300 }).addTo(kmLayer);
+      const lblIcon = L.divIcon({ className: '', html: `<div class="km-label">${markNum}${labelUnit}</div>`, iconAnchor: [-6, 5] });
+      L.marker([lat, lon], { icon: lblIcon, zIndexOffset: 301 }).addTo(kmLayer);
+      nextMark += interval;
+      markNum++;
+    }
+  }
+  // Update legend
+  document.getElementById('legend-interval').textContent = '1 ' + labelUnit;
+}
+
+// ── LOOP GENERATION ──
+function setLoopUnit(u) {
+  loopUnit = u;
+  if(document.getElementById('dut-km')) document.getElementById('dut-km').classList.toggle('active', u === 'km');
+  if(document.getElementById('dut-mi')) document.getElementById('dut-mi').classList.toggle('active', u === 'mi');
+}
+
+function setDistUnit(u) {
+  distUnit = u;
+  loopUnit = u;
+  document.getElementById('unit-km').classList.toggle('active', u === 'km');
+  document.getElementById('unit-mi').classList.toggle('active', u === 'mi');
+  if(document.getElementById('dut-km')) document.getElementById('dut-km').classList.toggle('active', u === 'km');
+  if(document.getElementById('dut-mi')) document.getElementById('dut-mi').classList.toggle('active', u === 'mi');
+  document.getElementById('legend-interval').textContent = '1 ' + u;
+  redrawKmMarkers();
+  updateHeaderStats();
+  updateWaypointsList();
+}
+
+async function generateLoop() {
+  if (waypoints.length < 1) { showToast('Set a start point first'); return; }
+  const targetInput = +document.getElementById('loop-dist').value;
+  const targetKm = loopUnit === 'mi' ? targetInput * 1.60934 : targetInput;
+  if (targetKm < 0.5) { showToast('Distance too short'); return; }
+
+  spin(true);
+  setStatus('Generating loop...', 'working');
+
+  // Clear existing route but keep start marker
+  const start = waypoints[0];
+  clearAll(true);
+  addWaypointMarker(start, 0);
+  waypoints = [start];
+
+  // Strategy: place 3 intermediate waypoints in a rough diamond shape
+  // sized so the total road distance ≈ targetKm
+  // Radius in degrees ≈ targetKm / (4 * 111)
+  const radius = (targetKm / 4) / 111;
+  const candidates = [
+    { lat: start.lat + radius,     lon: start.lon + radius * 0.4 },
+    { lat: start.lat + radius * 0.4, lon: start.lon + radius },
+    { lat: start.lat - radius * 0.2, lon: start.lon + radius * 0.9 },
+  ];
+
+  try {
+    let accDist = 0;
+    let prev = start;
+    for (let i = 0; i < candidates.length; i++) {
+      const pt = candidates[i];
+      const seg = await getRoute(prev, pt);
+      addWaypointMarker(pt, waypoints.length);
+      waypoints.push(pt);
+      drawSegment(seg.coords, false);
+      accDist += seg.distKm;
+      routeSegments.push({ coords: seg.coords, dist: seg.distKm });
+      prev = pt;
+    }
+    // Close the loop back to start
+    const closeSeg = await getRoute(prev, start);
+    drawSegment(closeSeg.coords, false);
+    accDist += closeSeg.distKm;
+    routeSegments.push({ coords: closeSeg.coords, dist: closeSeg.distKm });
+    totalDistKm = accDist;
+    redrawKmMarkers();
+    updateWaypointsList();
+    updateHeaderStats();
+    updateButtons();
+
+    const diff = Math.abs(accDist - targetKm);
+    const pct = Math.round((diff / targetKm) * 100);
+    setStatus(`Loop generated: ${fmtDist(accDist)} (target was ${fmtDist(targetKm)}, ${pct}% off)`, 'ok');
+    map.fitBounds(routeLayer.getLayers()[0]?.getBounds ? (() => {
+      let bounds = null;
+      routeLayer.eachLayer(l => { if(l.getBounds) bounds = bounds ? bounds.extend(l.getBounds()) : l.getBounds(); });
+      return bounds;
+    })() : map.getBounds(), { padding: [40, 40] });
+
+    if (pct > 20) showToast(`Route is ~${pct}% off target — try adjusting distance`);
+
+  } catch(e) {
+    setStatus('Loop generation failed — try a different location.', '');
+    showToast('Could not generate loop here');
+  }
+  spin(false);
+}
+
+// ── CLEAR / REVERSE ──
+function clearAll(keepMapView) {
+  waypoints.forEach(wp => { if (wp.marker && map) try { map.removeLayer(wp.marker); } catch(e){} });
+  waypoints = [];
+  if (routeLayer) try { routeLayer.clearLayers(); } catch(e) {}
+  if (kmLayer) try { kmLayer.clearLayers(); } catch(e) {}
+  routeSegments = [];
+  kmMarkers = [];
+  totalDistKm = 0;
+  updateWaypointsList();
+  updateHeaderStats();
+  updateButtons();
+  document.getElementById('btn-gen-loop').disabled = true;
+  setStatus('Cleared.', '');
+  showHint();
+  if (mode === 'click') setHint('Click the map to add waypoints');
+  else setHint('Click the map to set a start point for the loop');
+}
+
+async function reverseRoute() {
+  if (waypoints.length < 2) return;
+  const pts = waypoints.map(w => ({ lat: w.lat, lon: w.lon })).reverse();
+  clearAll(true);
+  spin(true);
+  setStatus('Reversing route...', 'working');
+  // Re-add start
+  addWaypointMarker(pts[0], 0);
+  waypoints = [pts[0]];
+  updateWaypointsList();
+  for (let i = 1; i < pts.length; i++) {
+    await addWaypoint(pts[i]);
+  }
+  spin(false);
+  showToast('Route reversed');
+}
+
+// GPX export removed
+
+// ── UI UPDATES ──
+function fmtDist(km) {
+  if (distUnit === 'mi') return (km * 0.621371).toFixed(2) + ' mi';
+  return km.toFixed(2) + ' km';
+}
+
+function updateHeaderStats() {
+  const d = distUnit === 'mi' ? (totalDistKm * 0.621371).toFixed(2) : totalDistKm.toFixed(2);
+  document.getElementById('h-dist').textContent = d;
+  document.getElementById('h-dist-lbl').textContent = distUnit;
+  document.getElementById('h-pts').textContent = waypoints.length;
+}
+
+function updateButtons() {
+  const has = waypoints.length > 0;
+  const hasRoute = routeSegments.length > 0;
+  document.getElementById('btn-reverse').disabled = waypoints.length < 2;
+  document.getElementById('btn-clear').disabled = !has;
+}
+
+function updateWaypointsList() {
+  const el = document.getElementById('waypoints-list');
+  const empty = document.getElementById('wp-empty');
+  if (!waypoints.length) {
+    empty.style.display = '';
+    el.innerHTML = ''; el.appendChild(empty);
+    return;
+  }
+  el.innerHTML = '';
+  let cumDist = 0;
+  waypoints.forEach((wp, i) => {
+    if (i > 0 && routeSegments[i-1]) cumDist += routeSegments[i-1].dist;
+    const div = document.createElement('div');
+    div.className = 'wp-item';
+    div.innerHTML = `
+      <div class="wp-num ${i===0?'start':''}">${i===0?'S':i}</div>
+      <div class="wp-coords">${wp.lat.toFixed(4)}, ${wp.lon.toFixed(4)}</div>
+      <div class="wp-dist">${i>0?fmtDist(cumDist):''}</div>
+      <button class="wp-del" onclick="removeWaypoint(${i})">✕</button>`;
+    el.appendChild(div);
+  });
+}
+
+async function removeWaypoint(i) {
+  // Remove the waypoint and rebuild route
+  const pts = waypoints.map(w => ({ lat: w.lat, lon: w.lon }));
+  pts.splice(i, 1);
+  clearAll(true);
+  if (!pts.length) return;
+  spin(true);
+  addWaypointMarker(pts[0], 0);
+  waypoints = [pts[0]];
+  for (let j = 1; j < pts.length; j++) await addWaypoint(pts[j]);
+  spin(false);
+}
+
+// ── INIT ──
+// Try to get user location for initial map centre
+navigator.geolocation && navigator.geolocation.getCurrentPosition(
+  pos => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
+  () => {}
+);
+</script>
+</body>
+</html>
