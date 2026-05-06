@@ -146,7 +146,7 @@
   .action-btn:disabled { opacity: .35; cursor: not-allowed; }
 
   /* Map */
-  #map { flex: 1; min-height: 0; cursor: crosshair; }
+  #map { flex: 1; min-height: 0; height: 100%; cursor: crosshair; }
 
   /* Floating map hint */
   #map-hint {
@@ -227,7 +227,7 @@
       </div>
 
       <!-- Loop options (shown only in loop mode) -->
-      <div class="sidebar-section" id="loop-section" style="display:none;background:#f0ede6;border-left:3px solid var(--accent)">
+      <div class="sidebar-section" id="loop-section" style="display:none !important;background:#f0ede6;border-left:3px solid var(--accent)">
         <div class="section-title">Target distance</div>
         <div class="dist-row">
           <input type="number" class="dist-input" id="loop-dist" value="5" min="0.5" max="100" step="0.5">
@@ -294,8 +294,8 @@
     </div>
 
     <!-- Map container -->
-    <div style="flex:1;position:relative;min-height:0;min-width:0">
-      <div id="map"></div>
+    <div style="flex:1;position:relative;min-height:0;min-width:0;display:flex;flex-direction:column">
+      <div id="map" style="flex:1;min-height:300px"></div>
       <div id="map-hint">Click anywhere on the map to add a waypoint</div>
       <div id="spinner"><div class="spin"></div></div>
     </div>
@@ -323,7 +323,9 @@ let snapEnabled = true;
 let totalDistKm = 0;
 
 // ── MAP INIT ──
-map = L.map('map', { zoomControl: true }).setView([40.0, -95.0], 4);
+document.addEventListener('DOMContentLoaded', () => {
+map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([40.0, -95.0], 4);
+  setTimeout(() => map.invalidateSize(), 200);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | Routing: OSRM',
   maxZoom: 19
@@ -360,7 +362,10 @@ function setMode(m) {
   mode = m;
   document.getElementById('mode-click').classList.toggle('active', m === 'click');
   document.getElementById('mode-loop').classList.toggle('active', m === 'loop');
-  document.getElementById('loop-section').style.display = m === 'loop' ? 'block' : 'none';
+  const ls = document.getElementById('loop-section');
+  ls.style.cssText = m === 'loop'
+    ? 'display:block;background:#f0ede6;border-left:3px solid var(--accent)'
+    : 'display:none';
   document.getElementById('snap-toggle-row').style.display = m === 'click' ? 'flex' : 'none';
   if (m === 'click') setHint('Click the map to add waypoints');
   else setHint('Click the map to set a start point for the loop');
@@ -742,6 +747,7 @@ navigator.geolocation && navigator.geolocation.getCurrentPosition(
   pos => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
   () => {}
 );
+}); // end DOMContentLoaded
 </script>
 </body>
 </html>
