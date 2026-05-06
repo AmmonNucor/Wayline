@@ -183,6 +183,11 @@
   .wl-km { background: var(--ink); width: 10px !important; height: 10px !important; border: 2px solid #fff !important; box-shadow: 0 1px 4px rgba(0,0,0,0.25) !important; }
   .km-label { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; background: var(--ink); color: var(--paper); padding: 2px 5px; border-radius: 4px; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
 
+  /* Road filter chips */
+  .rf-chip { display:flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; background:var(--paper2); border:1.5px solid var(--border); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; }
+  .rf-chip input { accent-color:var(--accent); cursor:pointer; }
+  .rf-chip:has(input:checked) { background:var(--accent); color:#fff; border-color:var(--accent); }
+
   /* Snap toggle */
   .snap-toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
   .snap-toggle input { opacity: 0; width: 0; height: 0; }
@@ -280,6 +285,17 @@
             <span class="snap-slider"></span>
           </label>
         </div>
+        <div id="road-filter-row" style="margin-bottom:12px">
+          <div style="font-size:13px;font-weight:500;margin-bottom:6px">Avoid road types</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px" id="road-filters">
+            <label class="rf-chip"><input type="checkbox" value="motorway" onchange="updateRoadFilters()"> Motorway</label>
+            <label class="rf-chip"><input type="checkbox" value="trunk" onchange="updateRoadFilters()"> Trunk</label>
+            <label class="rf-chip"><input type="checkbox" value="primary" onchange="updateRoadFilters()"> Primary</label>
+            <label class="rf-chip"><input type="checkbox" value="secondary" onchange="updateRoadFilters()"> Secondary</label>
+            <label class="rf-chip"><input type="checkbox" value="ferry" onchange="updateRoadFilters()"> Ferry</label>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">Requires GraphHopper API key (see settings)</div>
+        </div>
         <div id="waypoints-list">
           <div id="wp-empty">Click the map to add waypoints.</div>
         </div>
@@ -327,6 +343,8 @@ let loopUnit = 'km';
 let distUnit = 'km';
 let snapEnabled = true;
 let totalDistKm = 0;
+let avoidRoads = [];
+let settings = JSON.parse(localStorage.getItem('wayline_settings') || '{}');
 
 // ── MAP INIT ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -389,6 +407,7 @@ function setMode(m) {
     ? 'display:block;background:#f0ede6;border-left:3px solid var(--accent)'
     : 'display:none';
   document.getElementById('snap-toggle-row').style.display = m === 'click' ? 'flex' : 'none';
+  document.getElementById('road-filter-row').style.display = m === 'click' ? 'block' : 'none';
   if (m === 'click') setHint('Click the map to add waypoints');
   else setHint('Click the map to set a start point for the loop');
   try { clearAll(); } catch(e) {}
@@ -439,8 +458,44 @@ function gotoMyLocation() {
 }
 
 // ── OSRM ROUTING ──
+function updateRoadFilters() {
+  avoidRoads = [...document.querySelectorAll('#road-filters input:checked')].map(el => el.value);
+}
+
+function saveSettings() {
+  localStorage.setItem('wayline_settings', JSON.stringify(settings));
+}
+
+async function getRouteGH(from, to) {
+  const key = settings.ghKey;
+  if (!key) throw new Error('No GraphHopper key');
+  const avoidStr = avoidRoads.map(r => `avoid_features=${r}`).join('&');
+  const url = `https://graphhopper.com/api/1/route?point=${from.lat},${from.lon}&point=${to.lat},${to.lon}&profile=foot&points_encoded=false&${avoidStr}&key=${key}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    const data = await resp.json();
+    if (data.message) throw new Error('GH: ' + data.message);
+    const pts = data.paths[0].points.coordinates;
+    return {
+      coords: pts.map(c => [c[1], c[0]]),
+      distKm: data.paths[0].distance / 1000
+    };
+  } catch(e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
 async function getRoute(from, to) {
-  const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson&steps=true`;
+  // Use GraphHopper if API key is set and road filters are active
+  if (settings.ghKey && avoidRoads.length > 0) {
+    return await getRouteGH(from, to);
+  }
+  // Default: OSRM (free, no key needed)
+  const url = `https://router.project-osrm.org/route/v1/foot/${from.lon},${from.lat};${to.lon},${to.lat}?overview=full&geometries=geojson`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
@@ -448,29 +503,9 @@ async function getRoute(from, to) {
     clearTimeout(timer);
     const data = await resp.json();
     if (data.code !== 'Ok') throw new Error('OSRM: ' + data.code);
-    // Extract turn maneuvers from steps
-    const maneuvers = [];
-    const legs = data.routes[0].legs || [];
-    legs.forEach(leg => {
-      (leg.steps || []).forEach(step => {
-        const m = step.maneuver;
-        if (!m) return;
-        // Skip depart, arrive, and straight-on movements
-        if (['depart','arrive'].includes(m.type)) return;
-        if (!m.modifier || m.modifier === 'straight') return;
-        console.log('maneuver:', m.type, m.modifier, m.location);
-        maneuvers.push({
-          lat: m.location[1],
-          lon: m.location[0],
-          type: m.type,
-          modifier: m.modifier
-        });
-      });
-    });
     return {
       coords: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
-      distKm: data.routes[0].distance / 1000,
-      maneuvers
+      distKm: data.routes[0].distance / 1000
     };
   } catch(e) {
     clearTimeout(timer);
@@ -516,7 +551,6 @@ async function addWaypoint(pt) {
       const seg = await getRoute(prev, pt);
       waypoints.push(pt);
       drawSegment(seg.coords, false, -1);
-      drawManeuvers(seg.maneuvers);
       totalDistKm += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
       redrawKmMarkers();
@@ -634,47 +668,7 @@ function drawArrows(coords, offsetDir) {
 }
 
 // ── TURN ARROWS ──
-function drawManeuvers(maneuvers) {
-  if (!maneuvers || !maneuvers.length) return;
-  maneuvers.forEach(m => {
-    const svg = getTurnSVG(m.modifier);
-    if (!svg) return;
-    const icon = L.divIcon({
-      className: '',
-      html: svg,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
-    });
-    L.marker([m.lat, m.lon], { icon, zIndexOffset: 400, interactive: false }).addTo(routeLayer);
-  });
-}
 
-function getTurnSVG(modifier) {
-  const col = '#1a56db';
-  const s = 28;
-  const bg = `<circle cx="14" cy="14" r="13" fill="white" stroke="${col}" stroke-width="2" opacity="0.95"/>`;
-
-  // Helper: curved turn arrow going up then curving left or right
-  const left  = `<path d="M17 22 L17 13 Q17 6 10 6 L7 6 M7 6 L10 3 M7 6 L10 9" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const sleft = `<path d="M17 22 L17 14 Q16 8 10 8 L8 5 M8 5 L11 4 M8 5 L7 8" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const right = `<path d="M11 22 L11 13 Q11 6 18 6 L21 6 M21 6 L18 3 M21 6 L18 9" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const sright= `<path d="M11 22 L11 14 Q12 8 18 8 L20 5 M20 5 L17 4 M20 5 L21 8" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const uturn = `<path d="M10 22 L10 12 Q10 5 17 5 Q24 5 24 12 L21 12 M24 12 L21 15" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const fwd   = `<path d="M14 20 L14 8 M14 8 L10 12 M14 8 L18 12" stroke="${col}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-
-  let arrow;
-  switch(modifier) {
-    case 'sharp left':
-    case 'left':       arrow = left;   break;
-    case 'slight left':arrow = sleft;  break;
-    case 'sharp right':
-    case 'right':      arrow = right;  break;
-    case 'slight right':arrow = sright; break;
-    case 'uturn':      arrow = uturn;  break;
-    default:           arrow = fwd;    break; // catch-all for any modifier
-  }
-  return `<svg width="${s}" height="${s}" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">${bg}${arrow}</svg>`;
-}
 
 // ── KM MARKERS ──
 function haversine(a, b) {
@@ -782,7 +776,7 @@ async function generateLoop() {
       waypoints.push(pt);
       accDist += seg.distKm;
       routeSegments.push({ coords: seg.coords, dist: seg.distKm });
-      allSegs.push({ coords: seg.coords, maneuvers: seg.maneuvers });
+      allSegs.push({ coords: seg.coords });
       prev = pt;
     }
 
@@ -797,18 +791,20 @@ async function generateLoop() {
     }
     accDist += closeSeg.distKm;
     routeSegments.push({ coords: closeSeg.coords, dist: closeSeg.distKm });
-    allSegs.push({ coords: closeSeg.coords, maneuvers: closeSeg.maneuvers });
+    allSegs.push({ coords: closeSeg.coords });
     totalDistKm = accDist;
 
     const half = Math.ceil(allSegs.length / 2);
-    const outboundCoords = allSegs.slice(0, half).flatMap(s => s.coords);
-    const returnCoords = allSegs.slice(half).flatMap(s => s.coords);
-    const fullCoords = allSegs.flatMap(s => s.coords);
+    const outboundCoords = allSegs.slice(0, half).flat();
+    const returnCoords = allSegs.slice(half).flat();
+    const fullCoords = allSegs.flat();
 
     L.polyline(fullCoords, { color: '#e8521a', weight: 3, opacity: 0.85 }).addTo(routeLayer);
     drawArrows(outboundCoords, -1);
     drawArrows(returnCoords, -1);
-    allSegs.forEach(s => drawManeuvers(s.maneuvers));
+    allSegs.forEach((s, i) => {
+      const dir = i < half ? -1 : 1;
+    });
 
     redrawKmMarkers();
     updateWaypointsList();
@@ -934,6 +930,9 @@ async function removeWaypoint(i) {
 
 // ── INIT ──
 // Try to get user location for initial map centre
+// Restore settings
+if (settings.ghKey) document.getElementById('gh-api-key').value = settings.ghKey;
+
 navigator.geolocation && navigator.geolocation.getCurrentPosition(
   pos => map.setView([pos.coords.latitude, pos.coords.longitude], 13),
   () => {}
