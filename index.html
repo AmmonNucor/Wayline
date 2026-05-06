@@ -242,10 +242,7 @@
         <div class="section-title">Target distance</div>
         <div class="dist-row">
           <input type="number" class="dist-input" id="loop-dist" value="1" min="0.5" max="100" step="0.5">
-          <div class="dist-unit-toggle">
-            <button class="dut active" id="dut-km" onclick="setLoopUnit('km')">km</button>
-            <button class="dut" id="dut-mi" onclick="setLoopUnit('mi')">mi</button>
-          </div>
+          <span style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text2);padding:0 4px" id="loop-unit-label">km</span>
         </div>
         <button class="action-btn primary" id="btn-gen-loop" onclick="generateLoop()" disabled>Generate loop</button>
         <p style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5">Click the map to set a start point, then click Generate loop.</p>
@@ -725,19 +722,14 @@ function redrawKmMarkers() {
 }
 
 // ── LOOP GENERATION ──
-function setLoopUnit(u) {
-  loopUnit = u;
-  if(document.getElementById('dut-km')) document.getElementById('dut-km').classList.toggle('active', u === 'km');
-  if(document.getElementById('dut-mi')) document.getElementById('dut-mi').classList.toggle('active', u === 'mi');
-}
 
 function setDistUnit(u) {
   distUnit = u;
   loopUnit = u;
   document.getElementById('unit-km').classList.toggle('active', u === 'km');
   document.getElementById('unit-mi').classList.toggle('active', u === 'mi');
-  if(document.getElementById('dut-km')) document.getElementById('dut-km').classList.toggle('active', u === 'km');
-  if(document.getElementById('dut-mi')) document.getElementById('dut-mi').classList.toggle('active', u === 'mi');
+  const lbl = document.getElementById('loop-unit-label');
+  if (lbl) lbl.textContent = u;
   updateUnitDisplay();
 }
 
