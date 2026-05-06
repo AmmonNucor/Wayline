@@ -251,6 +251,19 @@
         <p style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5">Click the map to set a start point, then click Generate loop.</p>
       </div>
 
+      <!-- Road filters -->
+      <div class="sidebar-section">
+        <div class="section-title">Avoid road types</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px" id="road-filters">
+          <label class="rf-chip"><input type="checkbox" value="motorway" onchange="updateRoadFilters()"> Motorway</label>
+          <label class="rf-chip"><input type="checkbox" value="trunk" onchange="updateRoadFilters()"> Trunk</label>
+          <label class="rf-chip"><input type="checkbox" value="primary" onchange="updateRoadFilters()"> Primary</label>
+          <label class="rf-chip"><input type="checkbox" value="secondary" onchange="updateRoadFilters()"> Secondary</label>
+          <label class="rf-chip"><input type="checkbox" value="ferry" onchange="updateRoadFilters()"> Ferry</label>
+        </div>
+        <div style="font-size:11px;color:var(--text3)">Requires GraphHopper API key (see ⚙ settings)</div>
+      </div>
+
       <!-- Units -->
       <div class="sidebar-section">
         <div class="section-title">Units</div>
@@ -286,17 +299,7 @@
             <span class="snap-slider"></span>
           </label>
         </div>
-        <div id="road-filter-row" style="margin-bottom:12px">
-          <div style="font-size:13px;font-weight:500;margin-bottom:6px">Avoid road types</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px" id="road-filters">
-            <label class="rf-chip"><input type="checkbox" value="motorway" onchange="updateRoadFilters()"> Motorway</label>
-            <label class="rf-chip"><input type="checkbox" value="trunk" onchange="updateRoadFilters()"> Trunk</label>
-            <label class="rf-chip"><input type="checkbox" value="primary" onchange="updateRoadFilters()"> Primary</label>
-            <label class="rf-chip"><input type="checkbox" value="secondary" onchange="updateRoadFilters()"> Secondary</label>
-            <label class="rf-chip"><input type="checkbox" value="ferry" onchange="updateRoadFilters()"> Ferry</label>
-          </div>
-          <div style="font-size:11px;color:var(--text3);margin-top:6px">Requires GraphHopper API key (see settings)</div>
-        </div>
+
         <div id="waypoints-list">
           <div id="wp-empty">Click the map to add waypoints.</div>
         </div>
@@ -420,7 +423,6 @@ function setMode(m) {
     ? 'display:block;background:#f0ede6;border-left:3px solid var(--accent)'
     : 'display:none';
   document.getElementById('snap-toggle-row').style.display = m === 'click' ? 'flex' : 'none';
-  document.getElementById('road-filter-row').style.display = m === 'click' ? 'block' : 'none';
   if (m === 'click') setHint('Click the map to add waypoints');
   else setHint('Click the map to set a start point for the loop');
   try { clearAll(); } catch(e) {}
