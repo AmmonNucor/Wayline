@@ -42,7 +42,8 @@
   .hstat-lbl { font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: .08em; text-transform: uppercase; margin-top: 1px; }
 
   /* Main area */
-  #main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+  #main { flex: 1; display: flex; overflow: hidden; min-height: 0; position: relative; }
+  #map-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; position: relative; }
 
   /* Sidebar */
   #sidebar {
@@ -52,8 +53,8 @@
   }
   @media (max-width: 680px) {
     #main { flex-direction: column; }
-    #sidebar { width: 100%; max-height: 50vh; border-right: none; border-bottom: 1px solid var(--border); overflow-y: auto; }
-    #map { min-height: 50vh !important; }
+    #sidebar { width: 100%; max-height: 45vh; border-right: none; border-bottom: 1px solid var(--border); overflow-y: auto; flex-shrink: 0; }
+    #map-wrap { flex: 1; min-height: 55vh; }
   }
 
   .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
@@ -147,7 +148,7 @@
   .action-btn:disabled { opacity: .35; cursor: not-allowed; }
 
   /* Map */
-  #map { flex: 1; min-height: 400px; cursor: crosshair; }
+  #map { width: 100%; height: 100%; cursor: crosshair; }
 
   /* Floating map hint */
   #map-hint {
@@ -295,8 +296,8 @@
     </div>
 
     <!-- Map container -->
-    <div id="map-wrap" style="flex:1;position:relative;min-height:0;min-width:0;overflow:hidden">
-      <div id="map" style="position:absolute;inset:0"></div>
+    <div id="map-wrap" style="flex:1;min-height:0;min-width:0;position:relative">
+      <div id="map"></div>
       <div id="map-hint">Click anywhere on the map to add a waypoint</div>
       <div id="spinner"><div class="spin"></div></div>
     </div>
