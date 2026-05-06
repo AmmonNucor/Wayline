@@ -234,7 +234,7 @@
       <div class="sidebar-section" id="loop-section" style="display:none !important;background:#f0ede6;border-left:3px solid var(--accent)">
         <div class="section-title">Target distance</div>
         <div class="dist-row">
-          <input type="number" class="dist-input" id="loop-dist" value="5" min="0.5" max="100" step="0.5">
+          <input type="number" class="dist-input" id="loop-dist" value="1" min="0.5" max="100" step="0.5">
           <div class="dist-unit-toggle">
             <button class="dut active" id="dut-km" onclick="setLoopUnit('km')">km</button>
             <button class="dut" id="dut-mi" onclick="setLoopUnit('mi')">mi</button>
@@ -602,10 +602,7 @@ function setDistUnit(u) {
   document.getElementById('unit-mi').classList.toggle('active', u === 'mi');
   if(document.getElementById('dut-km')) document.getElementById('dut-km').classList.toggle('active', u === 'km');
   if(document.getElementById('dut-mi')) document.getElementById('dut-mi').classList.toggle('active', u === 'mi');
-  document.getElementById('legend-interval').textContent = '1 ' + u;
-  redrawKmMarkers();
-  updateHeaderStats();
-  updateWaypointsList();
+  updateUnitDisplay();
 }
 
 async function generateLoop() {
@@ -748,6 +745,13 @@ function updateHeaderStats() {
   document.getElementById('h-dist').textContent = d;
   document.getElementById('h-dist-lbl').textContent = distUnit;
   document.getElementById('h-pts').textContent = waypoints.length;
+}
+
+function updateUnitDisplay() {
+  updateHeaderStats();
+  redrawKmMarkers();
+  updateWaypointsList();
+  document.getElementById('legend-interval').textContent = '1 ' + distUnit;
 }
 
 function updateButtons() {
