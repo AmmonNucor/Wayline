@@ -41,20 +41,20 @@
   .hstat-val { font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700; line-height: 1; color: var(--paper); }
   .hstat-lbl { font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: .08em; text-transform: uppercase; margin-top: 1px; }
 
-  /* Main area — sidebar fixed left, map fills rest */
-  #main { flex: 1; position: relative; overflow: hidden; }
+  /* Main area */
+  #main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
   #sidebar {
-    position: absolute; top: 0; left: 0; bottom: 0; width: 300px;
+    width: 300px; flex-shrink: 0;
     background: var(--paper); border-right: 1px solid var(--border);
-    overflow-y: auto; z-index: 200;
+    overflow-y: auto; position: relative; z-index: 10;
   }
   #map-wrap {
-    position: absolute; top: 0; left: 300px; right: 0; bottom: 0;
+    flex: 1; position: relative; min-width: 0;
   }
   @media (max-width: 680px) {
-    #sidebar { position: relative; width: 100%; height: 45vh; bottom: auto; border-right: none; border-bottom: 1px solid var(--border); }
-    #main { display: flex; flex-direction: column; }
-    #map-wrap { position: relative; left: 0; flex: 1; min-height: 55vh; }
+    #main { flex-direction: column; }
+    #sidebar { width: 100%; height: 45vh; border-right: none; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    #map-wrap { flex: 1; min-height: 55vh; }
   }
 
   .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
@@ -148,7 +148,8 @@
   .action-btn:disabled { opacity: .35; cursor: not-allowed; }
 
   /* Map */
-  #map { position: absolute; inset: 0; cursor: crosshair; }
+  #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; cursor: crosshair; }
+  #map-wrap .leaflet-container { position: absolute !important; top: 0; left: 0; right: 0; bottom: 0; }
 
   /* Floating map hint */
   #map-hint {
@@ -172,6 +173,7 @@
   /* Leaflet overrides */
   .leaflet-control-zoom a { background: var(--paper) !important; color: var(--ink) !important; border-color: var(--border) !important; font-weight: 700 !important; }
   .leaflet-control-attribution { font-size: 9px !important; background: rgba(245,243,238,0.8) !important; }
+  /* Leaflet contained within #map-wrap */
 
   /* Custom marker styles */
   .wl-dot { border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,0.3); }
@@ -326,8 +328,23 @@ let totalDistKm = 0;
 
 // ── MAP INIT ──
 document.addEventListener('DOMContentLoaded', () => {
+// Set explicit pixel size before Leaflet init so it doesn't expand to viewport
+const mapWrap = document.getElementById('map-wrap');
+const mapEl = document.getElementById('map');
+mapEl.style.width = mapWrap.offsetWidth + 'px';
+mapEl.style.height = mapWrap.offsetHeight + 'px';
+
 map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([40.0, -95.0], 4);
-  setTimeout(() => map.invalidateSize(), 200);
+
+// After init, switch to CSS-driven sizing and recalculate
+setTimeout(() => {
+  mapEl.style.width = '';
+  mapEl.style.height = '';
+  map.invalidateSize();
+}, 100);
+
+// Recalculate on window resize
+window.addEventListener('resize', () => map.invalidateSize());
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | Routing: OSRM',
   maxZoom: 19
