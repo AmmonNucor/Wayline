@@ -810,9 +810,9 @@ async function generateLoop() {
     totalDistKm = accDist;
 
     const half = Math.ceil(allSegs.length / 2);
-    const outboundCoords = allSegs.slice(0, half).flat();
-    const returnCoords = allSegs.slice(half).flat();
-    const fullCoords = allSegs.flat();
+    const outboundCoords = allSegs.slice(0, half).reduce((a, b) => a.concat(b), []);
+    const returnCoords = allSegs.slice(half).reduce((a, b) => a.concat(b), []);
+    const fullCoords = allSegs.reduce((a, b) => a.concat(b), []);
 
     L.polyline(fullCoords, { color: '#e8521a', weight: 3, opacity: 0.85 }).addTo(routeLayer);
     drawArrows(outboundCoords, -1);
